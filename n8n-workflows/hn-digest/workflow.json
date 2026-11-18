@@ -1,0 +1,75 @@
+{
+  "name": "Hacker News Morning Digest",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "days", "triggerAtHour": 8 }
+          ]
+        }
+      },
+      "id": "sched-01",
+      "name": "Daily 8AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://hacker-news.firebaseio.com/v0/topstories.json",
+        "options": {}
+      },
+      "id": "http-01",
+      "name": "HN Top Stories",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ids = ($json || []).slice(0, 10);\nconst out = [];\nfor (const id of ids) {\n  const res = await $helpers.httpRequest({ url: `https://hacker-news.firebaseio.com/v0/item/${id}.json` });\n  if (res && res.title) out.push({ json: { title: res.title, url: res.url || `https://news.ycombinator.com/item?id=${id}`, score: res.score, by: res.by } });\n}\nreturn out;"
+      },
+      "id": "code-01",
+      "name": "Fetch Top 10",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const lines = $input.all().map((i, n) => `${n+1}. [${i.json.title}](${i.json.url}) — ⬆ ${i.json.score}`);\nreturn [{ json: { text: '📰 **HN Morning Digest**\\n' + lines.join('\\n') } }];"
+      },
+      "id": "code-02",
+      "name": "Format",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.DISCORD_WEBHOOK_URL }}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "content", "value": "={{ $json.text }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-02",
+      "name": "Post to Discord",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 300]
+    }
+  ],
+  "connections": {
+    "Daily 8AM": { "main": [[{ "node": "HN Top Stories", "type": "main", "index": 0 }]] },
+    "HN Top Stories": { "main": [[{ "node": "Fetch Top 10", "type": "main", "index": 0 }]] },
+    "Fetch Top 10": { "main": [[{ "node": "Format", "type": "main", "index": 0 }]] },
+    "Format": { "main": [[{ "node": "Post to Discord", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}
